@@ -6,12 +6,13 @@
 5. go back to step 2 and repeat
 """
 import subprocess
-from yingruiz_config import TARGET_INTERVALS, TARGET_PARIS, CONDA_RUN_PREFIX, gcp_logger
+from yingruiz_config import TARGET_INTERVALS, TARGET_PARIS, gcp_logger,CONDA_ENV_NAME
 import datetime
 import time
 import os
 from pathlib import Path
 
+MAX_ATTEMPT = 5 # how many retry
 
 def main():
     
@@ -30,36 +31,61 @@ def main():
         run_report[pair] = {}
         for interval in TARGET_INTERVALS:
             run_report[pair][interval] = {
-                "monthly":{"time":None, "output":None}, 
-                "daily":{"time":None, "output":None}
+                "monthly":{"time":None, "output":None, "error":None}, 
+                "daily":{"time":None, "output":None, "error":None}
                 }
             
             # monthly 
-            monthly_cmd = f"{CONDA_RUN_PREFIX} python download-kline.py -t spot -s {pair} -i {interval} -c 1 -skip-daily 1".split()
+            monthly_cmd = f"conda run --name {CONDA_ENV_NAME} python download-kline.py -t spot -s {pair} -i {interval} -c 1 -skip-daily 1".split() # {CONDA_RUN_PREFIX} 
             start_time = time.time()
-            run_report[pair][interval]["monthly"]["output"] = subprocess.run(monthly_cmd, capture_output = True, text = True)
+            current_n = 0
+            
+            while current_n < MAX_ATTEMPT:
+                temp_result = subprocess.run(monthly_cmd, capture_output = True, text = True)
+                if not temp_result.returncode:
+                    break
+                current_n += 1
+                
+            run_report[pair][interval]["monthly"]["output"] = temp_result.stdout
+            run_report[pair][interval]["monthly"]["error"] = temp_result.stderr
             run_report[pair][interval]["monthly"]["time"] = time.time() - start_time
 
             # daily
-            daily_cmd = f"{CONDA_RUN_PREFIX} python download-kline.py -t spot -s {pair} -i {interval} -c 1 -skip-monthly 1 -startDate \
+            daily_cmd = f"conda run --name {CONDA_ENV_NAME} python download-kline.py -t spot -s {pair} -i {interval} -c 1 -skip-monthly 1 -startDate \
                 {datetime.date(year = year, month = month, day = 1)}".split()
             start_time = time.time()
-            run_report[pair][interval]["daily"]["output"] = subprocess.run(daily_cmd, capture_output = True, text = True)
+            current_n = 0
+            
+            while current_n < MAX_ATTEMPT:
+                temp_result = subprocess.run(daily_cmd, capture_output = True, text = True)
+                if not temp_result.returncode:
+                    break
+                current_n += 1
+                
+            run_report[pair][interval]["daily"]["output"] = temp_result.stdout
+            run_report[pair][interval]["daily"]["error"] = temp_result.stderr
             run_report[pair][interval]["daily"]["time"] = time.time() - start_time
     
     total_time = time.time() - total_start_time
     
     # delete later
+    # print(TARGET_PARIS, TARGET_INTERVALS, CONDA_ENV_NAME)
     logs = []
-    for pair_name, pair in run_report:
-        for interval_name, interval in pair:
+    errors = []
+    for pair_name, pair in run_report.items():
+        for interval_name, interval in pair.items():
+            errors.append(interval["monthly"]["error"])
+            errors.append(interval["daily"]["error"])
             logs.append(interval["monthly"]["output"])
             logs.append(interval["daily"]["output"])
     logs_string = "".join(logs)
+    errors_string = "".join(errors)
     with open("logs.log", "w") as f:
         f.write(logs_string)
         f.writelines([str(total_time)])
-        
+    with open("erros.txt", "w") as f:
+        f.write(errors_string)
+    
     return
     # delete later end
     
