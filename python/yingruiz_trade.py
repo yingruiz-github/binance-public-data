@@ -7,6 +7,7 @@ import datetime
 import time
 import os
 from pathlib import Path
+from gcp_module.module.cloud_logging.cloud_logging import CloudLoggingWrapper
 
 
 def main():
@@ -60,12 +61,21 @@ def main():
         logs.append(pair["daily"]["output"])
     logs_string = "".join(logs)
     errors_string = "".join(errors)
-    with open("trade_logs.log", "w") as f:
+    with open("trade_download_output.log", "w") as f:
         f.write(logs_string)
         f.writelines([str(total_time)])
-    with open("trade_erros.txt", "w") as f:
+    with open("trade_download_errors.log", "w") as f:
         f.write(errors_string)
-        
+    
+    # log to gcp cloud logging
+    message = {"total_time":total_time, "error_message":errors_string}
+    if errors_string:
+        gcp_logger.log_v1(message=str(message), file_path=str(current_file),folder=CloudLoggingWrapper.LOG_DIR.DOWNLOAD_DATA_DIR,
+                          level=CloudLoggingWrapper.LOG_SEVERITY.ERROR)
+    else:
+        gcp_logger.log_v1(message=str(message), file_path=str(current_file),folder=CloudLoggingWrapper.LOG_DIR.DOWNLOAD_DATA_DIR,
+                          level=CloudLoggingWrapper.LOG_SEVERITY.INFO)
+    
     return
     # delete later end
 

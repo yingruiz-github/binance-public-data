@@ -6,13 +6,16 @@
 5. go back to step 2 and repeat
 """
 import subprocess
-from yingruiz_config import TARGET_INTERVALS, TARGET_PARIS, gcp_logger,CONDA_ENV_NAME
+from yingruiz_config import TARGET_INTERVALS, TARGET_PARIS, gcp_logger, CONDA_ENV_NAME, ALL_PAIRS
 import datetime
 import time
 import os
 from pathlib import Path
+from gcp_module.module.cloud_logging.cloud_logging import CloudLoggingWrapper
 
 MAX_ATTEMPT = 5 # how many retry
+gcp_logger = CloudLoggingWrapper()
+pairs = ALL_PAIRS
 
 def main():
     
@@ -27,7 +30,7 @@ def main():
     run_report = {}
     total_start_time = time.time()
     
-    for pair in TARGET_PARIS:
+    for pair in pairs:
         run_report[pair] = {}
         for interval in TARGET_INTERVALS:
             run_report[pair][interval] = {
@@ -80,12 +83,20 @@ def main():
             logs.append(interval["daily"]["output"])
     logs_string = "".join(logs)
     errors_string = "".join(errors)
-    with open("logs.log", "w") as f:
+    with open("kline_download_output.log", "w") as f:
         f.write(logs_string)
         f.writelines([str(total_time)])
-    with open("erros.txt", "w") as f:
+    with open("kline_download_erros.log", "w") as f:
         f.write(errors_string)
-    
+
+    # log to gcp cloud logging
+    message = {"total_time":total_time, "error_message":errors_string}
+    if errors_string:
+        gcp_logger.log_v1(message=str(message), file_path=str(current_file),folder=CloudLoggingWrapper.LOG_DIR.DOWNLOAD_DATA_DIR,
+                          level=CloudLoggingWrapper.LOG_SEVERITY.ERROR)
+    else:
+        gcp_logger.log_v1(message=str(message), file_path=str(current_file),folder=CloudLoggingWrapper.LOG_DIR.DOWNLOAD_DATA_DIR,
+                          level=CloudLoggingWrapper.LOG_SEVERITY.INFO)
     return
     # delete later end
     
